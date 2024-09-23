@@ -18,13 +18,25 @@ from nav_msgs.msg import Path
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from std_msgs.msg import Int32
 import math
+import yaml
 import datetime
 from visualization_msgs.msg import Marker, MarkerArray
+from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import PointCloud2
+from std_msgs.msg import Header
+import sensor_msgs_py.point_cloud2 as pc2
+
 
 class SimNode(Node):
     def __init__(self):
         super().__init__('ros2_robot_sim_node')
         
+        
+        self.image_map = cv2.imread("/ros2_humble_sim_ws/src/ros2-humble-sim/ros2_robot_sim/resource/map/map.pgm",0)
+        self.image_map = cv2.flip(self.image_map, 0)
+
+        self.map_info_dict = self.load_map_yaml("/ros2_humble_sim_ws/src/ros2-humble-sim/ros2_robot_sim/resource/map/map.yaml")
+
         self.global_frame = 'map'
         self.base_frame  = 'base_link'
         self.odom_frame = 'odom'
@@ -37,6 +49,7 @@ class SimNode(Node):
         self.cmd_vel_group = MutuallyExclusiveCallbackGroup()
         self.nav2_group = MutuallyExclusiveCallbackGroup() 
         self.timer_group = MutuallyExclusiveCallbackGroup()   
+        self.cloud_group = MutuallyExclusiveCallbackGroup()   
   
        
 
@@ -68,12 +81,20 @@ class SimNode(Node):
 
         self.marker_array_publisher = self.create_publisher(MarkerArray, '/cogniteam_ros2_sim/marker_array', 10)
         
-         # Add a publisher for the compressed image
-        self.image_publisher = self.create_publisher(CompressedImage, '/cogniteam_ros2_sim/compressed_image', 10)
+        
+        self.scan_publisher = self.create_publisher(LaserScan, '/cogniteam_ros2_sim/scan', 10)
+
+        self.cloud_publisher = self.create_publisher(PointCloud2, '/cogniteam_ros2_sim/pointcloud', 10)
+
+        # Add a publisher for the compressed image
+        self.image_publisher = self.create_publisher(CompressedImage, '/cogniteam_ros2_sim/compressed_image', 10, )
         self.bridge = CvBridge()
         
         # Timer to publish odometry
-        self.odom_timer = self.create_timer(0.1, self.publish_odometry)
+        self.odom_timer = self.create_timer(0.1, self.publish_odometry, self.timer_group)
+        
+        self.cloud_timer = self.create_timer(0.1, self.publish_point_cloud, self.cloud_group)
+        
 
         # self.map_publisher = self.create_publisher(OccupancyGrid, '/map', 10)
 
@@ -86,6 +107,79 @@ class SimNode(Node):
         self.tf_timer = self.create_timer(0.1, self.tf_timer_callback, callback_group=self.timer_group)
 
 
+    def load_map_yaml(self,yaml_file_path):
+        with open(yaml_file_path, 'r') as file:
+            try:
+                map_data = yaml.safe_load(file)
+                return map_data
+            except yaml.YAMLError as exc:
+                print(f"Error loading YAML file: {exc}")
+                return None
+        
+    def convert_pose_to_pix(self, pose: PoseStamped):
+        # Calculate pixel coordinates
+        x_pix = (pose.pose.position.x - self.map_info_dict['origin'][0]) / self.map_info_dict['resolution']
+        y_pix = (pose.pose.position.y - self.map_info_dict['origin'][1]) / self.map_info_dict['resolution']
+
+        # Create a point (in OpenCV, this would be a tuple)
+        p = (int(x_pix), int(y_pix))
+
+        return p
+
+    def convert_pix_to_pose(self,pixel):
+   
+        pose = PoseStamped()
+        
+        pose.header.frame_id = self.global_frame
+
+        pose.pose.position.x = (pixel[0] * self.map_info_dict['resolution']) + self.map_info_dict['origin'][0]
+        pose.pose.position.y = (pixel[1] * self.map_info_dict['resolution']) + self.map_info_dict['origin'][1]
+        pose.pose.position.z = 0.0
+
+        # Assuming `q` is an instance of Quaternion
+        pose.pose.orientation.w = 1.0
+
+        return pose
+ 
+    def raycast_to_black_pixel(self, image, robot_pos, yaw, degree, max_range=None):
+        
+        height, width = image.shape
+
+        # Convert degree to radians and adjust with yaw
+        angle = yaw + math.radians(degree)
+
+        # Unit direction vector for the ray
+        direction = (math.cos(angle), math.sin(angle))
+        
+        # Initialize the robot's position
+        x_robot, y_robot = robot_pos
+        x, y = robot_pos
+        
+        step_size = 1  # Step by 1 pixel each time (can be adjusted)
+        distance = 0
+
+        
+        while 0 <= int(x) < width and 0 <= int(y) < height:
+            # Check the pixel value at the current ray position
+            if image[int(y), int(x)] == 0:  # Check if the pixel is black (0)
+
+                distance_from_robot = math.sqrt((x_robot - x) ** 2 + (y_robot - y) ** 2)
+
+                return (int(x), int(y)), distance_from_robot
+            
+            # Move along the ray direction
+            x += direction[0] * step_size
+            y += direction[1] * step_size
+
+            # Increase distance covered
+            distance += step_size
+
+            # If a max range is provided, stop if we exceed it
+            if max_range and distance >= max_range:
+                break
+       
+        # Return None if no black pixel was found
+        return None, None
 
     def publish_compressed_image(self):
         # Create a blank image with RGB background color (230, 0, 126)
@@ -321,11 +415,128 @@ class SimNode(Node):
     
 
     def publish_odometry(self):
-        if self.robot_pose is not None:
+        
+        if self.robot_pose is not None:           
            
-
-            # Publish the odometry message
             self.robot_pose_publisher.publish(self.robot_pose)
+
+    
+    def publish_point_cloud(self):
+        
+        x_pix_robot ,y_pix_robot  = self.convert_pose_to_pix(self.robot_pose)
+
+        scan_dict = {}
+        points = []
+        for deg in range(360):
+            scan_pix, distnace_from_robot = self.raycast_to_black_pixel(self.image_map, (x_pix_robot,y_pix_robot), deg, 0)
+            if scan_pix == None:
+                scan_dict[deg] = 0.0
+            else:
+                scan_dict[deg] = float(distnace_from_robot) * float(self.map_info_dict['resolution'])    
+                pose = self.convert_pix_to_pose(scan_pix)
+                points.append([
+                    pose.pose.position.x,
+                    pose.pose.position.y,
+                    0.1
+                ])
+                points.append([
+                    pose.pose.position.x,
+                    pose.pose.position.y,
+                    0.2
+                ])
+                points.append([
+                    pose.pose.position.x,
+                    pose.pose.position.y,
+                    0.3
+                ])
+                points.append([
+                    pose.pose.position.x,
+                    pose.pose.position.y,
+                    0.4
+                ])
+                points.append([
+                    pose.pose.position.x,
+                    pose.pose.position.y,
+                    0.5
+                ])
+
+        # Convert to numpy array for point cloud creation
+        points = np.array(points, dtype=np.float32)
+
+        # Create the PointCloud2 message
+        header = Header()
+        header.stamp = self.get_clock().now().to_msg()
+        header.frame_id = self.global_frame
+
+        pointcloud_msg = pc2.create_cloud_xyz32(header, points)
+        
+        # Publish the PointCloud2 message
+        self.cloud_publisher.publish(pointcloud_msg)
+        
+        
+        # Define parameters for the LaserScan
+        laser_scan = LaserScan()
+        laser_scan.header = Header()
+        laser_scan.header.stamp = self.get_clock().now().to_msg()
+        laser_scan.header.frame_id = self.global_frame
+        laser_scan.angle_min = -np.pi   # -90 degrees
+        laser_scan.angle_max = np.pi    # 90 degrees
+        laser_scan.angle_increment = np.pi / 180  # 1 degree
+        laser_scan.time_increment = 0.0
+        laser_scan.range_min = 0.05
+        laser_scan.range_max = 1000.0
+
+        # Filter points to be within a certain angle and distance
+        num_readings = int((laser_scan.angle_max - laser_scan.angle_min) / laser_scan.angle_increment) + 1
+        laser_scan.ranges = [float('inf')] * num_readings  # Initialize ranges
+
+        for point in points:
+            x, y, z = point
+
+            # Calculate angle and range
+            angle = np.arctan2(y, x)  # Angle in radians
+            range_value = np.sqrt(x**2 + y**2)  # Euclidean distance
+
+            # Check if the point is within the defined angle range
+            if laser_scan.angle_min <= angle <= laser_scan.angle_max:
+                index = int((angle - laser_scan.angle_min) / laser_scan.angle_increment)
+                # Update range only if it is less than the current value
+                if range_value < laser_scan.ranges[index]:
+                    laser_scan.ranges[index] = range_value
+
+        # Publish the LaserScan message
+        self.scan_publisher.publish(laser_scan)
+            
+    def create_laserscan_from_dict(self, distance_dict, angle_min=-np.pi, angle_max=np.pi, range_min=0.0, range_max=1000.0):
+      
+        # Initialize LaserScan message
+        scan = LaserScan()
+        scan.header.frame_id = self.global_frame
+        scan.angle_min = angle_min
+        scan.angle_max = angle_max
+        scan.angle_increment = np.deg2rad(1)  # Assuming 1 degree increments
+        scan.range_min = range_min
+        scan.range_max = range_max
+
+        # Prepare ranges and intensities
+        num_readings = int((angle_max - angle_min) / scan.angle_increment) + 1
+        scan.ranges = [float('inf')] * num_readings  # Initialize with inf
+        scan.intensities = [0.0] * num_readings  # Assuming no intensities
+
+        # Populate ranges based on the distance dictionary
+        for angle, distance in distance_dict.items():
+            if angle >= 0 and angle < 360:
+                
+                index = int((math.radians(angle) - angle_min) / scan.angle_increment)
+                
+                if distance == 0.0:
+                   scan.ranges[index] = 'inf'
+                   
+                if index > 360:
+                    continue
+                scan.ranges[index] = min(distance, range_max)  # Clamp to range_max
+
+        return scan
 
     def tf_timer_callback(self):
         # Convert Pose to TransformStamped
@@ -382,3 +593,4 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
