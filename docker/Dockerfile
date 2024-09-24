@@ -27,7 +27,6 @@ RUN apt-get update && \
 
 RUN  pip3 install pyyaml
 
-
 # Source the ROS environment and build the workspace
 RUN . /opt/ros/humble/setup.sh && \
     colcon build --symlink-install

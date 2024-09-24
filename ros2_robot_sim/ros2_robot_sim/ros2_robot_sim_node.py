@@ -16,7 +16,7 @@ from tf2_ros import TransformBroadcaster
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from nav_msgs.msg import Path
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
-from std_msgs.msg import Int32
+from std_msgs.msg import Int32, String
 import math
 import yaml
 import datetime
@@ -51,7 +51,12 @@ class SimNode(Node):
         self.timer_group = MutuallyExclusiveCallbackGroup()   
         self.cloud_group = MutuallyExclusiveCallbackGroup()   
   
-       
+        self.marker_array_subscriber = self.create_subscription(
+            MarkerArray,
+            '/cogniteam_ros2_sim/markers_input',
+            self.markers_callback,
+            10
+        )
 
         # Subscribe to cmd_vel
         self.cmd_vel_subscriber = self.create_subscription(
@@ -79,12 +84,17 @@ class SimNode(Node):
 
         self.battery_voltage_publisher = self.create_publisher(Int32, '/cogniteam_ros2_sim/battery_voltage', 10)
 
+        self.date_publisher = self.create_publisher(String, '/cogniteam_ros2_sim/date', 10)
+
         self.marker_array_publisher = self.create_publisher(MarkerArray, '/cogniteam_ros2_sim/marker_array', 10)
         
         
         self.scan_publisher = self.create_publisher(LaserScan, '/cogniteam_ros2_sim/scan', 10)
 
         self.cloud_publisher = self.create_publisher(PointCloud2, '/cogniteam_ros2_sim/pointcloud', 10)
+        
+        self.markers_output_publisher = self.create_publisher(MarkerArray, '/cogniteam_ros2_sim/markers_output', 10)
+
 
         # Add a publisher for the compressed image
         self.image_publisher = self.create_publisher(CompressedImage, '/cogniteam_ros2_sim/compressed_image', 10, )
@@ -236,7 +246,10 @@ class SimNode(Node):
         # Publish the compressed image
         self.image_publisher.publish(compressed_image_msg)
         
-    
+    def markers_callback(self, msg):
+        
+        self.markers_output_publisher.publish(msg)
+        
     def goal_callback(self, msg):
         # navigation_launch.py
         print('goal !!')
@@ -277,6 +290,14 @@ class SimNode(Node):
         self.get_logger().info('roal reached !!')
 
 
+    def publish_date(self):
+        
+        msg = String()
+        msg.data = str(datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S"))
+        
+        self.date_publisher.publish(msg)
+    
+    
     def publish_battery_voltage(self):
         msg = Int32()
         msg.data = 32
@@ -577,8 +598,9 @@ class SimNode(Node):
         # Broadcast the transform
         self.tf_broadcaster.sendTransform(odom_transform)
         
-        #publish the battery voltage
         self.publish_battery_voltage()
+        
+        self.publish_date()
         
         self.publish_compressed_image()
         
