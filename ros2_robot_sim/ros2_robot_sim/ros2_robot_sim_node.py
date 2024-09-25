@@ -103,7 +103,7 @@ class SimNode(Node):
         # Timer to publish odometry
         self.odom_timer = self.create_timer(0.1, self.publish_odometry, self.timer_group)
         
-        self.cloud_timer = self.create_timer(0.1, self.publish_point_cloud, self.cloud_group)
+        self.cloud_timer = self.create_timer(1, self.publish_point_cloud, self.cloud_group)
         
 
         # self.map_publisher = self.create_publisher(OccupancyGrid, '/map', 10)
@@ -263,6 +263,9 @@ class SimNode(Node):
         nav_goal.pose = msg.pose.pose
         wanted_path = self.nav.getPath(self.robot_pose, nav_goal)
         
+        if wanted_path == None:
+            return
+        
         if len(wanted_path.poses) ==  0:
             self.get_logger().info('bad path !!')
             return
@@ -273,8 +276,8 @@ class SimNode(Node):
 
 
         self.nav.goToPose(nav_goal)
-        while not self.nav.isTaskComplete():   
-            continue         
+        # while not self.nav.isTaskComplete():   
+        #     rclpy.spin_once(self)        
             # feedback = self.nav.getFeedback()
             # if feedback.navigation_time.nanoseconds / 1e9 > 600:
             #     self.nav.cancelTask()      
@@ -446,25 +449,14 @@ class SimNode(Node):
         
         x_pix_robot ,y_pix_robot  = self.convert_pose_to_pix(self.robot_pose)
 
-        scan_dict = {}
         points = []
         for deg in range(360):
             scan_pix, distnace_from_robot = self.raycast_to_black_pixel(self.image_map, (x_pix_robot,y_pix_robot), deg, 0)
             if scan_pix == None:
-                scan_dict[deg] = 0.0
+                continue
             else:
-                scan_dict[deg] = float(distnace_from_robot) * float(self.map_info_dict['resolution'])    
                 pose = self.convert_pix_to_pose(scan_pix)
-                points.append([
-                    pose.pose.position.x,
-                    pose.pose.position.y,
-                    0.1
-                ])
-                points.append([
-                    pose.pose.position.x,
-                    pose.pose.position.y,
-                    0.2
-                ])
+                
                 points.append([
                     pose.pose.position.x,
                     pose.pose.position.y,
@@ -615,4 +607,5 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
+
 
