@@ -25,7 +25,7 @@ from sensor_msgs.msg import LaserScan
 from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Header
 import sensor_msgs_py.point_cloud2 as pc2
-
+from sensor_msgs.msg import Joy
 
 class SimNode(Node):
     def __init__(self):
@@ -36,7 +36,13 @@ class SimNode(Node):
         self.image_map = cv2.flip(self.image_map, 0)
 
         self.map_info_dict = self.load_map_yaml("/ros2_humble_sim_ws/src/ros2-humble-sim/ros2_robot_sim/resource/map/map.yaml")
-
+        
+        self.max_lin_vel = 1.0
+        self.min_lin_vel = -1.0
+        
+        self.min_rad_per_second = -0.785398
+        self.max_rad_per_second = 0.785398
+        
         self.global_frame = 'map'
         self.base_frame  = 'base_link'
         self.odom_frame = 'odom'
@@ -74,6 +80,15 @@ class SimNode(Node):
             self.goal_callback,
             10,
             callback_group=self.nav2_group
+        )
+        
+        # Subscribe joy
+        self.joy_subscriber = self.create_subscription(
+            Joy,
+            '/cogniteam_ros2_sim/joy',
+            self.joy_callback,
+            10,
+             callback_group=self.cmd_vel_group
         )
 
         # Publish Odometry
@@ -117,6 +132,41 @@ class SimNode(Node):
         self.tf_timer = self.create_timer(0.1, self.tf_timer_callback, callback_group=self.timer_group)
 
 
+    
+    def joy_callback(self, msg: Joy):
+        # Right stick vertical axis (axes[4]) controls linear velocity
+        right_stick_y = msg.axes[5]  # Forward/Back movement of the right stick
+        
+        # Normalize to linear velocity range
+        if right_stick_y > 0:
+            # Moving forward (up), interpolate between 0 and max_lin_vel
+            linear_velocity = right_stick_y * self.max_lin_vel
+        else:
+            # Moving backward (down), interpolate between min_lin_vel and 0
+            linear_velocity = right_stick_y * abs(self.min_lin_vel)
+
+        # Left stick horizontal axis (axes[0]) controls angular velocity
+        left_stick_x = msg.axes[0]  # Left/Right movement of the left stick
+        
+        # Normalize to angular velocity range
+        if left_stick_x > 0:
+            # Moving right, interpolate between 0 and max_rad_per_second
+            angular_velocity = left_stick_x * self.max_rad_per_second
+        else:
+            # Moving left, interpolate between min_rad_per_second and 0
+            angular_velocity = left_stick_x * abs(self.min_rad_per_second)
+
+        # Create Twist message and publish
+        twist_msg = Twist()
+        twist_msg.linear.x = linear_velocity
+        twist_msg.angular.z = angular_velocity
+        
+        if self.robot_pose is not None:
+
+            self.apply_twist_to_pose(twist_msg, 0.1)
+
+        
+        
     def load_map_yaml(self,yaml_file_path):
         with open(yaml_file_path, 'r') as file:
             try:
