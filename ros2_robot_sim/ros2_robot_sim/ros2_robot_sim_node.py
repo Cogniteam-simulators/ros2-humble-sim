@@ -26,6 +26,7 @@ from sensor_msgs.msg import PointCloud2
 from std_msgs.msg import Header
 import sensor_msgs_py.point_cloud2 as pc2
 from sensor_msgs.msg import Joy
+from rclpy.qos import QoSProfile, ReliabilityPolicy
 
 class SimNode(Node):
     def __init__(self):
@@ -56,12 +57,18 @@ class SimNode(Node):
         self.nav2_group = MutuallyExclusiveCallbackGroup() 
         self.timer_group = MutuallyExclusiveCallbackGroup()   
         self.cloud_group = MutuallyExclusiveCallbackGroup()   
-  
+
+        
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            depth=10
+        )
+        
         self.marker_array_subscriber = self.create_subscription(
             MarkerArray,
             '/cogniteam_ros2_sim/markers_input',
             self.markers_callback,
-            10
+            qos_profile
         )
 
         # Subscribe to cmd_vel
@@ -101,14 +108,14 @@ class SimNode(Node):
 
         self.date_publisher = self.create_publisher(String, '/cogniteam_ros2_sim/date', 10)
 
-        self.marker_array_publisher = self.create_publisher(MarkerArray, '/cogniteam_ros2_sim/marker_array', 10)
+        self.marker_array_publisher = self.create_publisher(MarkerArray, '/cogniteam_ros2_sim/marker_array',  qos_profile)
         
         
         self.scan_publisher = self.create_publisher(LaserScan, '/cogniteam_ros2_sim/scan', 10)
 
         self.cloud_publisher = self.create_publisher(PointCloud2, '/cogniteam_ros2_sim/pointcloud', 10)
         
-        self.markers_output_publisher = self.create_publisher(MarkerArray, '/cogniteam_ros2_sim/markers_output', 10)
+        self.markers_output_publisher = self.create_publisher(MarkerArray, '/cogniteam_ros2_sim/markers_output',  qos_profile)
 
 
         # Add a publisher for the compressed image
