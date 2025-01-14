@@ -141,8 +141,8 @@ class SimNode(Node):
 
     
     def joy_callback(self, msg: Joy):
-        # Right stick vertical axis (axes[4]) controls linear velocity
-        right_stick_y = msg.axes[5]  # Forward/Back movement of the right stick
+        # Right stick vertical axis 
+        right_stick_y = msg.axes[3]  # Forward/Back movement of the right stick
         
         # Normalize to linear velocity range
         if right_stick_y > 0:

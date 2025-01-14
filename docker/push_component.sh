@@ -10,5 +10,5 @@ docker buildx inspect --bootstrap
 
 
 
-sudo docker buildx build --no-cache --platform linux/amd64 -t cognimbus/data-publisher-ros2:humble --push .
-#linux/arm64,
+sudo docker buildx build --no-cache --platform linux/arm64,linux/amd64 -t cognimbus/data-publisher-ros2:humble --push .
+
