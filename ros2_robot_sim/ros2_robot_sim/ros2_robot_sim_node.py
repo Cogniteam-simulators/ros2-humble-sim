@@ -1,6 +1,6 @@
 import rclpy
 from rclpy.node import Node
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Point
 from builtin_interfaces.msg import Time
 from geometry_msgs.msg import PoseWithCovarianceStamped, Twist
 from sensor_msgs.msg import Image
@@ -27,6 +27,7 @@ from std_msgs.msg import Header
 import sensor_msgs_py.point_cloud2 as pc2
 from sensor_msgs.msg import Joy
 from rclpy.qos import QoSProfile, ReliabilityPolicy
+import random
 
 class SimNode(Node):
     def __init__(self):
@@ -436,59 +437,156 @@ class SimNode(Node):
             self.apply_twist_to_pose(twist_msg, 0.1)
 
 
+    def get_unique_color(self):
+        """Generate a random unique color."""
+        return random.uniform(0, 1), random.uniform(0, 1), random.uniform(0, 1)
+
+    def create_arrow_marker(self):
+        marker = Marker()
+        marker.header.frame_id = self.global_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "cogniteam_sim"
+        marker.id = 0
+        marker.type = Marker.ARROW
+        marker.action = Marker.ADD
+        marker.pose.position.x = 1.0
+        marker.pose.position.y = 1.0
+        marker.pose.position.z = 0.0
+        marker.pose.orientation.w = 1.0
+        marker.scale.x = 1.0
+        marker.scale.y = 0.2
+        marker.scale.z = 0.2
+        marker.color.r, marker.color.g, marker.color.b = self.get_unique_color()
+        marker.color.a = 1.0
+        return marker
+
+    def create_cube_marker(self):
+        marker = Marker()
+        marker.header.frame_id = self.global_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "cogniteam_sim"
+        marker.id = 1
+        marker.type = Marker.CUBE
+        marker.action = Marker.ADD
+        marker.pose.position.x = 1.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 0.5
+        marker.scale.x = 0.5
+        marker.scale.y = 0.5
+        marker.scale.z = 0.5
+        marker.color.r, marker.color.g, marker.color.b = self.get_unique_color()
+        marker.color.a = 1.0
+        return marker
+
+    def create_sphere_marker(self):
+        marker = Marker()
+        marker.header.frame_id = self.global_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "cogniteam_sim"
+        marker.id = 2
+        marker.type = Marker.SPHERE
+        marker.action = Marker.ADD
+        marker.pose.position.x = 2.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 0.5
+        marker.scale.x = 0.5
+        marker.scale.y = 0.5
+        marker.scale.z = 0.5
+        marker.color.r, marker.color.g, marker.color.b = self.get_unique_color()
+        marker.color.a = 1.0
+        return marker
+
+    def create_cylinder_marker(self):
+        marker = Marker()
+        marker.header.frame_id = self.global_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "cogniteam_sim"
+        marker.id = 3
+        marker.type = Marker.CYLINDER
+        marker.action = Marker.ADD
+        marker.pose.position.x = 3.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 0.5
+        marker.scale.x = 0.5
+        marker.scale.y = 0.5
+        marker.scale.z = 1.0
+        marker.color.r, marker.color.g, marker.color.b = self.get_unique_color()
+        marker.color.a = 1.0
+        return marker
+
+    def create_line_strip_marker(self):
+        marker = Marker()
+        marker.header.frame_id = self.global_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "cogniteam_sim"
+        marker.id = 4
+        marker.type = Marker.LINE_STRIP
+        marker.action = Marker.ADD
+        marker.scale.x = 0.1
+        marker.color.r, marker.color.g, marker.color.b = self.get_unique_color()
+        marker.color.a = 1.0
+
+        # Triangle in the center
+        p1 = Point(x=0.0, y=0.0, z=0.0)
+        p2 = Point(x=1.0, y=0.0, z=0.0)
+        p3 = Point(x=0.5, y=1.0, z=0.0)
+        marker.points.extend([p1, p2, p3, p1])
+        return marker
+
+    def create_line_list_marker(self):
+        marker = Marker()
+        marker.header.frame_id = self.global_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "cogniteam_sim"
+        marker.id = 5
+        marker.type = Marker.LINE_LIST
+        marker.action = Marker.ADD
+        marker.scale.x = 0.1
+        marker.color.r, marker.color.g, marker.color.b = self.get_unique_color()
+        marker.color.a = 1.0
+
+        # Three lines, each 3 meters long
+        marker.points.extend([
+            Point(x=0.0, y=0.0, z=0.0), Point(x=3.0, y=0.0, z=0.0),
+            Point(x=0.0, y=1.0, z=0.0), Point(x=3.0, y=1.0, z=0.0),
+            Point(x=0.0, y=2.0, z=0.0), Point(x=3.0, y=2.0, z=0.0)
+        ])
+        return marker
+
+    def create_text_marker(self):
+        marker = Marker()
+        marker.header.frame_id = self.global_frame
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = "cogniteam_sim"
+        marker.id = 6
+        marker.type = Marker.TEXT_VIEW_FACING
+        marker.action = Marker.ADD
+        marker.pose.position.x = 0.0
+        marker.pose.position.y = 0.0
+        marker.pose.position.z = 2.0
+        marker.scale.z = 0.5
+        marker.color.r, marker.color.g, marker.color.b = self.get_unique_color()
+        marker.color.a = 1.0
+        marker.text = "hello from cogniteam"
+        return marker
+
+
     def publish_marker_array(self):
         
-        marker_array = MarkerArray()
-        
-        table_1_marker = Marker()
-        table_1_marker.header.frame_id = self.global_frame  
-        table_1_marker.header.stamp = self.get_clock().now().to_msg()
-        table_1_marker.ns = "cogniteam_sim"
-        table_1_marker.id = 0  # Unique ID for each marker
-        table_1_marker.type = Marker.CUBE
-        table_1_marker.action = Marker.ADD
-        table_1_marker.pose.position.x = -2.9
-        table_1_marker.pose.position.y = -6.0
-        table_1_marker.pose.position.z = 0.01
-        table_1_marker.pose.orientation.x = 0.0
-        table_1_marker.pose.orientation.y = 0.0
-        table_1_marker.pose.orientation.z = 0.700909
-        table_1_marker.pose.orientation.w = 0.713251
-        table_1_marker.scale.x = 4.0  # Size in meters (length)
-        table_1_marker.scale.y = 2.0  # Size in meters (width)
-        table_1_marker.scale.z = 0.5  # Size in meters (height)
-        table_1_marker.color.r = 150.0/ 255.0
-        table_1_marker.color.g = 75.0/ 255.0
-        table_1_marker.color.b = 0.0
-        table_1_marker.color.a = 1.0  # Fully opaque
-        table_1_marker.lifetime = rclpy.duration.Duration(seconds=1).to_msg()
-        
-        table_2_marker = Marker()
-        table_2_marker.header.frame_id = self.global_frame  
-        table_2_marker.header.stamp = self.get_clock().now().to_msg()
-        table_2_marker.ns = "cogniteam_sim"
-        table_2_marker.id = 1  # Unique ID for each marker
-        table_2_marker.type = Marker.CUBE
-        table_2_marker.action = Marker.ADD
-        table_2_marker.pose.position.x = -4.66361
-        table_2_marker.pose.position.y = -1.15407
-        table_2_marker.pose.position.z = 0.01
-        table_2_marker.pose.orientation.x = 0.0
-        table_2_marker.pose.orientation.y = 0.0
-        table_2_marker.pose.orientation.z = 0.700909
-        table_2_marker.pose.orientation.w = 0.713251
-        table_2_marker.scale.x = 4.0  # Size in meters (length)
-        table_2_marker.scale.y = 1.0  # Size in meters (width)
-        table_2_marker.scale.z = 0.5  # Size in meters (height)
-        table_2_marker.color.r = 150.0/ 255.0
-        table_2_marker.color.g = 75.0/ 255.0
-        table_2_marker.color.b = 0.0
-        table_2_marker.color.a = 1.0  # Fully opaque
-        table_2_marker.lifetime = rclpy.duration.Duration(seconds=1).to_msg()
+        marker_array = MarkerArray()       
+       
 
         # Add the marker to the marker array
-        marker_array.markers.append(table_1_marker)
-        marker_array.markers.append(table_2_marker)
+        marker_array.markers.append(self.create_arrow_marker())
+        marker_array.markers.append(self.create_cube_marker())
+        marker_array.markers.append(self.create_sphere_marker())
+        marker_array.markers.append(self.create_cylinder_marker())
+        marker_array.markers.append(self.create_line_strip_marker())
+        marker_array.markers.append(self.create_line_list_marker())
+        marker_array.markers.append(self.create_text_marker())
+
+
+
 
 
         # Publish the marker array
